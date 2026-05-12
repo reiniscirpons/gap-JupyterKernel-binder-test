@@ -1,5 +1,7 @@
-FROM ghcr.io/gap-system/gap:4.15.1-full as builder
+FROM ghcr.io/gap-system/gap:4.15.1-full
 USER root
+
+# Install build prerequisites
 
 RUN apt-get clean        && \
     apt-get update --yes && \
@@ -9,7 +11,17 @@ RUN apt-get clean        && \
       build-essential autoconf libtool pkg-config \
       curl graphviz
 
+# Compile Semigroups package
+
+RUN cd "/opt/gap/gap-4.15.1/pkg/semigroups" \
+    && ./configure \
+    && make -j10
+
+# Install Jupyter
+
 RUN python3 -m pip install --no-cache jupyterlab jupyter-server notebook
+
+# Compile GAP Kernel extension
 
 ENV NODE_VERSION=16.13.0
 ENV NVM_DIR="/root/.nvm"
@@ -28,9 +40,9 @@ RUN cd "/opt/gap/gap-4.15.1/pkg/" \
     && git checkout c2a5894c2701e53d4136a0d5089c7b7072ff3851 \
     && python3 -m pip install .
 
-RUN cd "/opt/gap/gap-4.15.1/pkg/semigroups" \
-    && ./configure \
-    && make -j10
+# Install libsemigroups_pybind11
+
+RUN python3 -m pip install --no-cache libsemigroups_pybind11
 
 RUN userdel gap
 ARG NB_USER
@@ -43,4 +55,5 @@ RUN adduser --disabled-password \
     --uid ${NB_UID} \
     ${NB_USER}
 WORKDIR ${HOME}
+COPY ./index.ipynb ${HOME}/index.ipynb
 USER ${USER}
