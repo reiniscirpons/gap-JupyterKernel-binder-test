@@ -1,18 +1,46 @@
-FROM ghcr.io/gap-system/gap:4.15.1-full
-
+FROM ghcr.io/gap-system/gap:4.15.1-full as builder
 USER root
 
 RUN apt-get clean        && \
     apt-get update --yes && \
     apt-get install --no-install-recommends --quiet --yes \
       python3 \
-      python3-pip
+      python3-pip \
+      build-essential autoconf libtool pkg-config \
+      curl graphviz
 
-USER gap
+RUN python3 -m pip install --no-cache jupyterlab jupyter-server notebook
 
-ENV PATH="/opt/gap/.local/bin/:${PATH}"
+ENV NODE_VERSION=16.13.0
+ENV NVM_DIR="/root/.nvm"
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
+RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
+RUN . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
 
-RUN python3 -m pip install jupyterlab==3.* jupyter-server==1.* notebook==6.*
+ENV PATH="$NVM_DIR/versions/node/v${NODE_VERSION}/bin/:${PATH}"
 
-# RUN cd "$HOME/gap-4.15.1/pkg/jupyterkernel" \
-#     && python3 -m pip install . --user
+RUN rm -rf "/opt/gap/gap-4.15.1/pkg/jupyterkernel"
+RUN cd "/opt/gap/gap-4.15.1/pkg/" \
+    && git clone https://github.com/gap-packages/JupyterKernel \
+    && cd JupyterKernel \
+    && git fetch origin \
+    && git checkout c2a5894c2701e53d4136a0d5089c7b7072ff3851 \
+    && python3 -m pip install .
+
+RUN cd "/opt/gap/gap-4.15.1/pkg/semigroups" \
+    && ./configure \
+    && make -j10
+
+RUN userdel gap
+ARG NB_USER
+ARG NB_UID
+ENV USER ${NB_USER}
+ENV HOME /home/${NB_USER}
+
+RUN adduser --disabled-password \
+    --gecos "Default user" \
+    --uid ${NB_UID} \
+    ${NB_USER}
+WORKDIR ${HOME}
+USER ${USER}
